@@ -232,11 +232,10 @@ public abstract class TestInvoker
 		ExceptionAggregator aggregator)
 	{
 		var oldSyncContext = default(SynchronizationContext);
+		var asyncSyncContext = default(AsyncTestSyncContext);
 
 		try
 		{
-			var asyncSyncContext = default(AsyncTestSyncContext);
-
 			if (testMethod.IsAsyncVoid())
 			{
 				oldSyncContext = SynchronizationContext.Current;
@@ -279,7 +278,7 @@ public abstract class TestInvoker
 		}
 		finally
 		{
-			if (oldSyncContext != null)
+			if (asyncSyncContext != null)
 				SetSynchronizationContext(oldSyncContext);
 		}
 	}
