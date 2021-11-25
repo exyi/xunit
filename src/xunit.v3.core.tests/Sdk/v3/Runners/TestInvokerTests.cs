@@ -384,7 +384,7 @@ public class TestInvokerTests
 			Assert.Fail("This test should never be run");
 	}
 
-	class TestableTestInvoker : TestInvoker
+	class TestableTestInvoker : TestInvoker<TestInvokerContext>
 	{
 		readonly IMessageBus messageBus;
 		readonly _ITest test;
@@ -439,26 +439,14 @@ public class TestInvokerTests
 			);
 		}
 
-		protected override ValueTask AfterTestMethodInvokedAsync(
-			_ITest test,
-			Type testClass,
-			MethodInfo testMethod,
-			IMessageBus messageBus,
-			ExceptionAggregator aggregator,
-			CancellationTokenSource cancellationTokenSource)
+		protected override ValueTask AfterTestMethodInvokedAsync(TestInvokerContext ctxt)
 		{
 			AfterTestMethodInvoked_Called = true;
 			AfterTestMethodInvoked_Context = TestContext.Current;
 			return default;
 		}
 
-		protected override ValueTask BeforeTestMethodInvokedAsync(
-			_ITest test,
-			Type testClass,
-			MethodInfo testMethod,
-			IMessageBus messageBus,
-			ExceptionAggregator aggregator,
-			CancellationTokenSource cancellationTokenSource)
+		protected override ValueTask BeforeTestMethodInvokedAsync(TestInvokerContext ctxt)
 		{
 			BeforeTestMethodInvoked_Called = true;
 			BeforeTestMethodInvoked_Context = TestContext.Current;
@@ -466,18 +454,15 @@ public class TestInvokerTests
 		}
 
 		protected override ValueTask<decimal> InvokeTestMethodAsync(
-			_ITest test,
-			object? testClassInstance,
-			MethodInfo testMethod,
-			object?[]? testMethodArguments,
-			ExceptionAggregator aggregator)
+			TestInvokerContext ctxt,
+			object? testClassInstance)
 		{
 			InvokeTestMethodAsync_Context = TestContext.Current;
 
-			return base.InvokeTestMethodAsync(test, testClassInstance, testMethod, testMethodArguments, aggregator);
+			return base.InvokeTestMethodAsync(ctxt, testClassInstance);
 		}
 
 		public ValueTask<decimal> RunAsync() =>
-			RunAsync(test, testClass, Array.Empty<object>(), testMethod, testMethodArguments, messageBus, Aggregator, TokenSource);
+			RunAsync(new(test, testClass, Array.Empty<object>(), testMethod, testMethodArguments, messageBus, Aggregator, TokenSource));
 	}
 }

@@ -37,6 +37,10 @@
     <PackageDownload Include="Microsoft.NETCore.App.Ref" Version="[$(AnnotatedReferenceAssemblyVersion)]" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\common\**\*.cs" LinkBase="Common" />
+  </ItemGroup>
+
   <!-- ======================================== -->
   <!-- Production-specific properties and items -->
 

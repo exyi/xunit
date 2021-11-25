@@ -341,14 +341,11 @@ public class XunitTestInvokerTests
 		}
 
 		protected override ValueTask<decimal> InvokeTestMethodAsync(
-			_ITest test,
-			object? testClassInstance,
-			MethodInfo testMethod,
-			object?[]? testMethodArguments,
-			ExceptionAggregator aggregator)
+			XunitTestInvokerContext ctxt,
+			object? testClassInstance)
 		{
 			if (lambda == null)
-				return base.InvokeTestMethodAsync(test, testClassInstance, testMethod, testMethodArguments, aggregator);
+				return base.InvokeTestMethodAsync(ctxt, testClassInstance);
 
 			Aggregator.Run(lambda);
 			return default;

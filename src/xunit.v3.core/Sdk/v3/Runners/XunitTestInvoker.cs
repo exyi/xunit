@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -13,15 +12,8 @@ namespace Xunit.v3;
 /// <summary>
 /// The test invoker for xUnit.net v3 tests.
 /// </summary>
-public class XunitTestInvoker : TestInvoker
+public class XunitTestInvoker : TestInvoker<XunitTestInvokerContext>
 {
-	// This dictionary holds instances of the before/after test attributes by test ID. This is initially
-	// populated by the call to RunAsync() with the complete list of test attributes; in BeforeTestMethodInvokedAsync,
-	// they are removed from the dictionary, and attempted to be run. The list of attributes that were successfully
-	// run is then put back into the dictionary, to be removed by AfterTestMethodInvokedAsync and then called
-	// during cleanup.
-	ConcurrentDictionary<string, IReadOnlyCollection<BeforeAfterTestAttribute>> beforeAfterTestAttributesByTestID = new();
-
 	/// <summary>
 	/// Initializes a new instance of the <see cref="XunitTestInvoker"/> class.
 	/// </summary>
@@ -34,27 +26,21 @@ public class XunitTestInvoker : TestInvoker
 	public static XunitTestInvoker Instance = new();
 
 	/// <inheritdoc/>
-	protected override ValueTask AfterTestMethodInvokedAsync(
-		_ITest test,
-		Type testClass,
-		MethodInfo testMethod,
-		IMessageBus messageBus,
-		ExceptionAggregator aggregator,
-		CancellationTokenSource cancellationTokenSource)
+	protected override ValueTask AfterTestMethodInvokedAsync(XunitTestInvokerContext ctxt)
 	{
-		var testUniqueID = test.UniqueID;
+		var testUniqueID = ctxt.Test.UniqueID;
 
 		// At this point, this list has been pruned to only the attributes that were successfully run
 		// during the call to BeforeTestMethodInvokedAsync.
-		if (beforeAfterTestAttributesByTestID.TryRemove(testUniqueID, out var beforeAfterTestAttributes) && beforeAfterTestAttributes.Count > 0)
+		if (ctxt.BeforeAfterTestAttributes.Count > 0)
 		{
-			var testAssemblyUniqueID = test.TestCase.TestCollection.TestAssembly.UniqueID;
-			var testCollectionUniqueID = test.TestCase.TestCollection.UniqueID;
-			var testClassUniqueID = test.TestCase.TestMethod?.TestClass.UniqueID;
-			var testMethodUniqueID = test.TestCase.TestMethod?.UniqueID;
-			var testCaseUniqueID = test.TestCase.UniqueID;
+			var testAssemblyUniqueID = ctxt.Test.TestCase.TestCollection.TestAssembly.UniqueID;
+			var testCollectionUniqueID = ctxt.Test.TestCase.TestCollection.UniqueID;
+			var testClassUniqueID = ctxt.Test.TestCase.TestMethod?.TestClass.UniqueID;
+			var testMethodUniqueID = ctxt.Test.TestCase.TestMethod?.UniqueID;
+			var testCaseUniqueID = ctxt.Test.TestCase.UniqueID;
 
-			foreach (var beforeAfterAttribute in beforeAfterTestAttributes)
+			foreach (var beforeAfterAttribute in ctxt.BeforeAfterTestAttributes)
 			{
 				var attributeName = beforeAfterAttribute.GetType().Name;
 				var afterTestStarting = new _AfterTestStarting
@@ -68,10 +54,10 @@ public class XunitTestInvoker : TestInvoker
 					TestUniqueID = testUniqueID
 				};
 
-				if (!messageBus.QueueMessage(afterTestStarting))
-					cancellationTokenSource.Cancel();
+				if (!ctxt.MessageBus.QueueMessage(afterTestStarting))
+					ctxt.CancellationTokenSource.Cancel();
 
-				aggregator.Run(() => beforeAfterAttribute.After(testMethod, test));
+				ctxt.Aggregator.Run(() => beforeAfterAttribute.After(ctxt.TestMethod, ctxt.Test));
 
 				var afterTestFinished = new _AfterTestFinished
 				{
@@ -84,8 +70,8 @@ public class XunitTestInvoker : TestInvoker
 					TestUniqueID = testUniqueID
 				};
 
-				if (!messageBus.QueueMessage(afterTestFinished))
-					cancellationTokenSource.Cancel();
+				if (!ctxt.MessageBus.QueueMessage(afterTestFinished))
+					ctxt.CancellationTokenSource.Cancel();
 			}
 		}
 
@@ -93,32 +79,26 @@ public class XunitTestInvoker : TestInvoker
 	}
 
 	/// <inheritdoc/>
-	protected override ValueTask BeforeTestMethodInvokedAsync(
-		_ITest test,
-		Type testClass,
-		MethodInfo testMethod,
-		IMessageBus messageBus,
-		ExceptionAggregator aggregator,
-		CancellationTokenSource cancellationTokenSource)
+	protected override ValueTask BeforeTestMethodInvokedAsync(XunitTestInvokerContext ctxt)
 	{
-		var testUniqueID = test.UniqueID;
+		var testUniqueID = ctxt.Test.UniqueID;
 
 		// At this point, this list is the full attribute list from the call to RunAsync. We attempt to
 		// run the Before half of the attributes, and then keep track of which ones we successfully ran,
 		// so we can put only those back into the dictionary for later retrieval by AfterTestMethodInvokedAsync.
-		if (beforeAfterTestAttributesByTestID.TryRemove(testUniqueID, out var beforeAfterTestAttributes) && beforeAfterTestAttributes.Count > 0)
+		if (ctxt.BeforeAfterTestAttributes.Count > 0)
 		{
-			var testAssemblyUniqueID = test.TestCase.TestCollection.TestAssembly.UniqueID;
-			var testCollectionUniqueID = test.TestCase.TestCollection.UniqueID;
-			var testClassUniqueID = test.TestCase.TestMethod?.TestClass.UniqueID;
-			var testMethodUniqueID = test.TestCase.TestMethod?.UniqueID;
-			var testCaseUniqueID = test.TestCase.UniqueID;
+			var testAssemblyUniqueID = ctxt.Test.TestCase.TestCollection.TestAssembly.UniqueID;
+			var testCollectionUniqueID = ctxt.Test.TestCase.TestCollection.UniqueID;
+			var testClassUniqueID = ctxt.Test.TestCase.TestMethod?.TestClass.UniqueID;
+			var testMethodUniqueID = ctxt.Test.TestCase.TestMethod?.UniqueID;
+			var testCaseUniqueID = ctxt.Test.TestCase.UniqueID;
 
 			// Since we want them cleaned in reverse order from how they're run, we'll push a stack back
 			// into the container rather than a list.
 			var beforeAfterAttributesRun = new Stack<BeforeAfterTestAttribute>();
 
-			foreach (var beforeAfterAttribute in beforeAfterTestAttributes)
+			foreach (var beforeAfterAttribute in ctxt.BeforeAfterTestAttributes)
 			{
 				var attributeName = beforeAfterAttribute.GetType().Name;
 				var beforeTestStarting = new _BeforeTestStarting
@@ -132,18 +112,18 @@ public class XunitTestInvoker : TestInvoker
 					TestUniqueID = testUniqueID
 				};
 
-				if (!messageBus.QueueMessage(beforeTestStarting))
-					cancellationTokenSource.Cancel();
+				if (!ctxt.MessageBus.QueueMessage(beforeTestStarting))
+					ctxt.CancellationTokenSource.Cancel();
 				else
 				{
 					try
 					{
-						beforeAfterAttribute.Before(testMethod, test);
+						beforeAfterAttribute.Before(ctxt.TestMethod, ctxt.Test);
 						beforeAfterAttributesRun.Push(beforeAfterAttribute);
 					}
 					catch (Exception ex)
 					{
-						aggregator.Add(ex);
+						ctxt.Aggregator.Add(ex);
 						break;
 					}
 					finally
@@ -159,47 +139,45 @@ public class XunitTestInvoker : TestInvoker
 							TestUniqueID = testUniqueID
 						};
 
-						if (!messageBus.QueueMessage(beforeTestFinished))
-							cancellationTokenSource.Cancel();
+						if (!ctxt.MessageBus.QueueMessage(beforeTestFinished))
+							ctxt.CancellationTokenSource.Cancel();
 					}
 				}
 
-				if (cancellationTokenSource.IsCancellationRequested)
+				if (ctxt.CancellationTokenSource.IsCancellationRequested)
 					break;
 			}
 
-			beforeAfterTestAttributesByTestID[testUniqueID] = beforeAfterAttributesRun;
+			ctxt.BeforeAfterTestAttributes = beforeAfterAttributesRun;
 		}
 
 		return default;
 	}
 
 	/// <inheritdoc/>
-	protected override object? CreateTestClassInstance(
-		_ITest test,
-		Type testClass,
-		object?[] constructorArguments)
+	protected override object? CreateTestClassInstance(XunitTestInvokerContext ctxt)
 	{
 		// We allow for Func<T> when the argument is T, such that we should be able to get the value just before
 		// invoking the test. So we need to do a transform on the arguments.
 		object?[]? actualCtorArguments = null;
 
-		if (constructorArguments != null)
+		if (ctxt.ConstructorArguments != null)
 		{
 			var ctorParams =
-				testClass
+				ctxt
+					.TestClass
 					.GetConstructors()
 					.Where(ci => !ci.IsStatic && ci.IsPublic)
 					.Single()
 					.GetParameters();
 
-			actualCtorArguments = new object?[constructorArguments.Length];
+			actualCtorArguments = new object?[ctxt.ConstructorArguments.Length];
 
-			for (var idx = 0; idx < constructorArguments.Length; ++idx)
+			for (var idx = 0; idx < ctxt.ConstructorArguments.Length; ++idx)
 			{
-				actualCtorArguments[idx] = constructorArguments[idx];
+				actualCtorArguments[idx] = ctxt.ConstructorArguments[idx];
 
-				var ctorArgumentValueType = constructorArguments[idx]?.GetType();
+				var ctorArgumentValueType = ctxt.ConstructorArguments[idx]?.GetType();
 				if (ctorArgumentValueType != null)
 				{
 					var ctorArgumentParamType = ctorParams[idx].ParameterType;
@@ -208,24 +186,21 @@ public class XunitTestInvoker : TestInvoker
 					{
 						var invokeMethod = ctorArgumentValueType.GetMethod("Invoke", new Type[0]);
 						if (invokeMethod != null)
-							actualCtorArguments[idx] = invokeMethod.Invoke(constructorArguments[idx], new object?[0]);
+							actualCtorArguments[idx] = invokeMethod.Invoke(ctxt.ConstructorArguments[idx], new object?[0]);
 					}
 				}
 			}
 		}
 
-		return Activator.CreateInstance(testClass, actualCtorArguments);
+		return Activator.CreateInstance(ctxt.TestClass, actualCtorArguments);
 	}
 
 	/// <inheritdoc/>
 	protected override ValueTask<decimal> InvokeTestMethodAsync(
-		_ITest test,
-		object? testClassInstance,
-		MethodInfo testMethod,
-		object?[]? testMethodArguments,
-		ExceptionAggregator aggregator)
+		XunitTestInvokerContext ctxt,
+		object? testClassInstance)
 	{
-		var testCase = (IXunitTestCase)test.TestCase;
+		var testCase = (IXunitTestCase)ctxt.Test.TestCase;
 
 		if (testCase.InitializationException != null)
 		{
@@ -236,22 +211,19 @@ public class XunitTestInvoker : TestInvoker
 
 		return
 			testCase.Timeout > 0
-				? InvokeTimeoutTestMethodAsync(testCase.Timeout, test, testClassInstance, testMethod, testMethodArguments, aggregator)
-				: base.InvokeTestMethodAsync(test, testClassInstance, testMethod, testMethodArguments, aggregator);
+				? InvokeTimeoutTestMethodAsync(ctxt, testClassInstance, testCase.Timeout)
+				: base.InvokeTestMethodAsync(ctxt, testClassInstance);
 	}
 
 	async ValueTask<decimal> InvokeTimeoutTestMethodAsync(
-		int timeout,
-		_ITest test,
+		XunitTestInvokerContext ctxt,
 		object? testClassInstance,
-		MethodInfo testMethod,
-		object?[]? testMethodArguments,
-		ExceptionAggregator aggregator)
+		int timeout)
 	{
-		if (!testMethod.IsAsync())
+		if (!ctxt.TestMethod.IsAsync())
 			throw TestTimeoutException.ForIncompatibleTest();
 
-		var baseTask = base.InvokeTestMethodAsync(test, testClassInstance, testMethod, testMethodArguments, aggregator).AsTask();
+		var baseTask = base.InvokeTestMethodAsync(ctxt, testClassInstance).AsTask();
 		var resultTask = await Task.WhenAny(baseTask, Task.Delay(timeout));
 
 		if (resultTask != baseTask)
@@ -283,11 +255,6 @@ public class XunitTestInvoker : TestInvoker
 		IReadOnlyCollection<BeforeAfterTestAttribute> beforeAfterTestAttributes,
 		IMessageBus messageBus,
 		ExceptionAggregator aggregator,
-		CancellationTokenSource cancellationTokenSource)
-	{
-		if (beforeAfterTestAttributes != null && beforeAfterTestAttributes.Count > 0)
-			beforeAfterTestAttributesByTestID[test.UniqueID] = beforeAfterTestAttributes;
-
-		return base.RunAsync(test, testClass, constructorArguments, testMethod, testMethodArguments, messageBus, aggregator, cancellationTokenSource);
-	}
+		CancellationTokenSource cancellationTokenSource) =>
+			RunAsync(new(test, testClass, constructorArguments, testMethod, testMethodArguments, messageBus, aggregator, cancellationTokenSource, beforeAfterTestAttributes));
 }
