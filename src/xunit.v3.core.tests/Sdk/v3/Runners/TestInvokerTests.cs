@@ -260,7 +260,7 @@ public class TestInvokerTests
 			Assert.Null(testState.ExceptionParentIndices);
 			Assert.Null(testState.ExceptionStackTraces);
 			Assert.Null(testState.ExceptionTypes);
-			Assert.True(testState.ExecutionTime >= 21.12m);
+			Assert.True(testState.ExecutionTime > 0m);
 			Assert.Null(testState.FailureCause);
 			Assert.Equal(TestResult.Passed, testState.Result);
 		}
@@ -294,7 +294,7 @@ public class TestInvokerTests
 			Assert.Equal(-1, Assert.Single(testState.ExceptionParentIndices!));
 			Assert.Single(testState.ExceptionStackTraces!);
 			Assert.Equal(typeof(TrueException).FullName, Assert.Single(testState.ExceptionTypes!));
-			Assert.True(testState.ExecutionTime >= 21.12m);
+			Assert.True(testState.ExecutionTime > 0m);
 			Assert.Equal(FailureCause.Assertion, testState.FailureCause);
 			Assert.Equal(TestResult.Failed, testState.Result);
 		}
@@ -323,7 +323,7 @@ public class TestInvokerTests
 			Assert.Equal(-1, Assert.Single(testState.ExceptionParentIndices!));
 			Assert.Single(testState.ExceptionStackTraces!);
 			Assert.Equal(typeof(InvalidOperationException).FullName, Assert.Single(testState.ExceptionTypes!));
-			Assert.True(testState.ExecutionTime >= 21.12m);
+			Assert.True(testState.ExecutionTime > 0m);
 			Assert.Equal(FailureCause.Exception, testState.FailureCause);
 			Assert.Equal(TestResult.Failed, testState.Result);
 		}
@@ -384,9 +384,15 @@ public class TestInvokerTests
 			Assert.Fail("This test should never be run");
 	}
 
-	class TestableTestInvoker : TestInvoker<_ITestCase>
+	class TestableTestInvoker : TestInvoker
 	{
-		public readonly new ExceptionAggregator Aggregator;
+		readonly IMessageBus messageBus;
+		readonly _ITest test;
+		readonly Type testClass;
+		readonly MethodInfo testMethod;
+		readonly object?[]? testMethodArguments;
+
+		public readonly ExceptionAggregator Aggregator;
 		public bool AfterTestMethodInvoked_Called;
 		public TestContext? AfterTestMethodInvoked_Context;
 		public bool BeforeTestMethodInvoked_Called;
@@ -401,9 +407,14 @@ public class TestInvokerTests
 			MethodInfo testMethod,
 			object?[]? testMethodArguments,
 			ExceptionAggregator aggregator,
-			CancellationTokenSource cancellationTokenSource) :
-				base(test, messageBus, testClass, new object[0], testMethod, testMethodArguments, aggregator, cancellationTokenSource)
+			CancellationTokenSource cancellationTokenSource)
 		{
+			this.test = test;
+			this.messageBus = messageBus;
+			this.testClass = testClass;
+			this.testMethod = testMethod;
+			this.testMethodArguments = testMethodArguments;
+
 			Aggregator = aggregator;
 			TokenSource = cancellationTokenSource;
 		}
@@ -428,27 +439,45 @@ public class TestInvokerTests
 			);
 		}
 
-		protected override ValueTask AfterTestMethodInvokedAsync()
+		protected override ValueTask AfterTestMethodInvokedAsync(
+			_ITest test,
+			Type testClass,
+			MethodInfo testMethod,
+			IMessageBus messageBus,
+			ExceptionAggregator aggregator,
+			CancellationTokenSource cancellationTokenSource)
 		{
 			AfterTestMethodInvoked_Called = true;
 			AfterTestMethodInvoked_Context = TestContext.Current;
 			return default;
 		}
 
-		protected override ValueTask BeforeTestMethodInvokedAsync()
+		protected override ValueTask BeforeTestMethodInvokedAsync(
+			_ITest test,
+			Type testClass,
+			MethodInfo testMethod,
+			IMessageBus messageBus,
+			ExceptionAggregator aggregator,
+			CancellationTokenSource cancellationTokenSource)
 		{
 			BeforeTestMethodInvoked_Called = true;
 			BeforeTestMethodInvoked_Context = TestContext.Current;
 			return default;
 		}
 
-		protected override ValueTask InvokeTestMethodAsync(object? testClassInstance)
+		protected override ValueTask<decimal> InvokeTestMethodAsync(
+			_ITest test,
+			object? testClassInstance,
+			MethodInfo testMethod,
+			object?[]? testMethodArguments,
+			ExceptionAggregator aggregator)
 		{
 			InvokeTestMethodAsync_Context = TestContext.Current;
 
-			ElapsedTime += new TimeSpan(0, 0, 0, 21, 120);
-
-			return base.InvokeTestMethodAsync(testClassInstance);
+			return base.InvokeTestMethodAsync(test, testClassInstance, testMethod, testMethodArguments, aggregator);
 		}
+
+		public ValueTask<decimal> RunAsync() =>
+			RunAsync(test, testClass, Array.Empty<object>(), testMethod, testMethodArguments, messageBus, Aggregator, TokenSource);
 	}
 }
