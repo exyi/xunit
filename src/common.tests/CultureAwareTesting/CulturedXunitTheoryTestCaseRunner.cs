@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Globalization;
-using System.Threading;
 using System.Threading.Tasks;
 using Xunit.v3;
 
@@ -12,21 +11,10 @@ namespace Xunit.Sdk
 		CultureInfo? originalCulture;
 		CultureInfo? originalUICulture;
 
-		public CulturedXunitTheoryTestCaseRunner(
-			CulturedXunitTheoryTestCase culturedXunitTheoryTestCase,
-			string displayName,
-			string? skipReason,
-			object?[] constructorArguments,
-			_IMessageSink diagnosticMessageSink,
-			IMessageBus messageBus,
-			ExceptionAggregator aggregator,
-			CancellationTokenSource cancellationTokenSource)
-				: base(culturedXunitTheoryTestCase, displayName, skipReason, constructorArguments, diagnosticMessageSink, messageBus, aggregator, cancellationTokenSource)
-		{
-			culture = culturedXunitTheoryTestCase.Culture;
-		}
+		public CulturedXunitTheoryTestCaseRunner(string culture) =>
+			this.culture = culture;
 
-		protected override ValueTask AfterTestCaseStartingAsync()
+		protected override ValueTask AfterTestCaseStartingAsync(XunitDelayEnumeratedTheoryTestCaseRunnerContext ctxt)
 		{
 			try
 			{
@@ -39,21 +27,21 @@ namespace Xunit.Sdk
 			}
 			catch (Exception ex)
 			{
-				Aggregator.Add(ex);
+				ctxt.Aggregator.Add(ex);
 				return default;
 			}
 
-			return base.AfterTestCaseStartingAsync();
+			return base.AfterTestCaseStartingAsync(ctxt);
 		}
 
-		protected override ValueTask BeforeTestCaseFinishedAsync()
+		protected override ValueTask BeforeTestCaseFinishedAsync(XunitDelayEnumeratedTheoryTestCaseRunnerContext ctxt)
 		{
 			if (originalUICulture != null)
 				CultureInfo.CurrentUICulture = originalUICulture;
 			if (originalCulture != null)
 				CultureInfo.CurrentCulture = originalCulture;
 
-			return base.BeforeTestCaseFinishedAsync();
+			return base.BeforeTestCaseFinishedAsync(ctxt);
 		}
 	}
 }

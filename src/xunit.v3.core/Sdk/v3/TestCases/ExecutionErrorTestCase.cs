@@ -70,6 +70,6 @@ namespace Xunit.v3
 			object?[] constructorArguments,
 			ExceptionAggregator aggregator,
 			CancellationTokenSource cancellationTokenSource) =>
-				new ExecutionErrorTestCaseRunner(this, messageBus, aggregator, cancellationTokenSource).RunAsync();
+				ExecutionErrorTestCaseRunner.Instance.RunAsync(this, messageBus, aggregator, cancellationTokenSource);
 	}
 }

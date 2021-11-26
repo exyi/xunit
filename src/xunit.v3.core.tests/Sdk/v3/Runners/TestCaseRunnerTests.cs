@@ -190,8 +190,10 @@ public class TestCaseRunnerTests
 		Assert.Same(runner.TestCase, runner.BeforeTestCaseStarting_Context.TestCase);
 	}
 
-	class TestableTestCaseRunner : TestCaseRunner<_ITestCase>
+	class TestableTestCaseRunner : TestCaseRunner<TestCaseRunnerContext<_ITestCase>, _ITestCase>
 	{
+		readonly ExceptionAggregator aggregator;
+		readonly IMessageBus messageBus;
 		readonly RunSummary result;
 
 		public Action<ExceptionAggregator> AfterTestCaseStarting_Callback = _ => { };
@@ -203,6 +205,7 @@ public class TestCaseRunnerTests
 		public Exception? RunTestAsync_AggregatorResult;
 		public bool RunTestAsync_Called;
 		public TestContext? RunTestAsync_Context;
+		public _ITestCase TestCase;
 		public CancellationTokenSource TokenSource;
 
 		TestableTestCaseRunner(
@@ -211,14 +214,14 @@ public class TestCaseRunnerTests
 			ExceptionAggregator aggregator,
 			CancellationTokenSource tokenSource,
 			RunSummary result)
-				: base(testCase, messageBus, aggregator, tokenSource)
 		{
+			this.messageBus = messageBus;
+			this.aggregator = aggregator;
 			this.result = result;
 
+			TestCase = testCase;
 			TokenSource = tokenSource;
 		}
-
-		public new _ITestCase? TestCase => base.TestCase;
 
 		public static TestableTestCaseRunner Create(
 			IMessageBus? messageBus = null,
@@ -239,25 +242,28 @@ public class TestCaseRunnerTests
 			);
 		}
 
-		protected override ValueTask AfterTestCaseStartingAsync()
+		protected override ValueTask AfterTestCaseStartingAsync(TestCaseRunnerContext<_ITestCase> ctxt)
 		{
 			AfterTestCaseStarting_Called = true;
 			AfterTestCaseStarting_Context = TestContext.Current;
-			AfterTestCaseStarting_Callback(Aggregator);
+			AfterTestCaseStarting_Callback(ctxt.Aggregator);
 			return default;
 		}
 
-		protected override ValueTask BeforeTestCaseFinishedAsync()
+		protected override ValueTask BeforeTestCaseFinishedAsync(TestCaseRunnerContext<_ITestCase> ctxt)
 		{
 			BeforeTestCaseFinished_Called = true;
 			BeforeTestCaseStarting_Context = TestContext.Current;
-			BeforeTestCaseFinished_Callback(Aggregator);
+			BeforeTestCaseFinished_Callback(ctxt.Aggregator);
 			return default;
 		}
 
-		protected override ValueTask<RunSummary> RunTestAsync()
+		public ValueTask<RunSummary> RunAsync()
+			=> RunAsync(new(TestCase, messageBus, aggregator, TokenSource));
+
+		protected override ValueTask<RunSummary> RunTestAsync(TestCaseRunnerContext<_ITestCase> ctxt)
 		{
-			RunTestAsync_AggregatorResult = Aggregator.ToException();
+			RunTestAsync_AggregatorResult = ctxt.Aggregator.ToException();
 			RunTestAsync_Called = true;
 			RunTestAsync_Context = TestContext.Current;
 			return new(result);

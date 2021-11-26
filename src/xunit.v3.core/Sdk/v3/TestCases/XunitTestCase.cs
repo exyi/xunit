@@ -160,16 +160,16 @@ namespace Xunit.v3
 			Guard.ArgumentNotNull(aggregator);
 			Guard.ArgumentNotNull(cancellationTokenSource);
 
-			return new XunitTestCaseRunner(
+			return XunitTestCaseRunner.Instance.RunAsync(
 				this,
+				messageBus,
+				aggregator,
+				cancellationTokenSource,
 				TestCaseDisplayName,
 				SkipReason,
 				constructorArguments,
-				TestMethodArguments,
-				messageBus,
-				aggregator,
-				cancellationTokenSource
-			).RunAsync();
+				TestMethodArguments
+			);
 		}
 
 		/// <inheritdoc/>
